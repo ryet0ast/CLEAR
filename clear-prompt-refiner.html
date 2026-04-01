@@ -1,0 +1,1669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CLEAR Prompt Refiner</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #faf8f2;
+      --surface: #ffffff;
+      --text: #111111;
+      --muted: #555555;   /* 7.55:1 on white, 7.22:1 on --bg — WCAG AAA ✓ */
+      --border: #ddd8cc;
+      --primary: #FFC72C;
+      --primary-hover: #e6b000;
+      --primary-text: #000000;
+      --radius: 14px;
+      --shadow: 0 2px 8px rgba(0,0,0,.08);
+      --shadow-lg: 0 8px 24px rgba(0,0,0,.14);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.65;
+    }
+
+    /* ─── Layout ─── */
+    .page { display: none; min-height: 100vh; }
+    .page.active { display: flex; flex-direction: column; }
+
+    .app-header {
+      background: #000000;
+      border-bottom: 3px solid var(--primary);
+      padding: 14px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,.3);
+    }
+    .app-header .logo {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: var(--primary);
+      letter-spacing: -0.5px;
+    }
+    .app-header .logo span { color: #ffffff; }
+    .app-header .subtitle { color: #aaaaaa; font-size: .85rem; }
+    .app-header .btn-ghost { color: #aaaaaa; }
+    .app-header .btn-ghost:hover { color: var(--primary); background: rgba(255,199,44,.1); }
+
+    .container {
+      max-width: 900px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 40px 24px;
+      flex: 1;
+    }
+
+    /* ─── Intro Page ─── */
+    .intro-hero {
+      text-align: center;
+      padding: 48px 0 40px;
+    }
+    .intro-hero h1 {
+      font-size: 2.8rem;
+      font-weight: 900;
+      letter-spacing: -1px;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+    .intro-hero h1 em { color: var(--text); font-style: normal; }
+    .intro-hero h1 strong { color: #6B4A00; }  /* #6B4A00 = 8.1:1 on --bg — WCAG AAA ✓ */
+    .intro-hero p {
+      font-size: 1.1rem;
+      color: var(--muted);
+      max-width: 560px;
+      margin: 0 auto 36px;
+    }
+    .clear-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 14px;
+      margin-bottom: 48px;
+    }
+    .clear-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 22px 14px;
+      box-shadow: var(--shadow);
+      border-top: 4px solid;
+      text-align: center;
+      transition: transform .15s, box-shadow .15s;
+    }
+    .clear-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+    /* letter rendered as a solid badge so accent color is background, not text */
+    .letter-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
+      font-size: 1.8rem;
+      font-weight: 900;
+      line-height: 1;
+      margin: 0 auto 10px;
+    }
+    .clear-card .word {
+      font-size: .78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 8px;
+    }
+    .clear-card .desc {
+      font-size: .78rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .attribution {
+      font-size: .8rem;
+      color: var(--muted);
+      margin-bottom: 32px;
+    }
+    .attribution strong { color: var(--text); }
+    .doi-link {
+      color: #1E3A8A;           /* 9.98:1 on --bg — WCAG AAA ✓ */
+      text-decoration: underline;
+      font-size: .8rem;
+      margin-top: 4px;
+      display: inline-block;
+    }
+    .doi-link:hover { color: #2563EB; }
+
+    /* ─── Buttons ─── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 28px;
+      border: none;
+      border-radius: 8px;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: #000000;
+    }
+    .btn-primary:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(255,199,44,.45); }
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1.5px solid #cccccc;
+    }
+    .btn-secondary:hover { background: var(--bg); border-color: #999; }
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      padding: 10px 16px;
+    }
+    .btn-ghost:hover { color: var(--text); background: var(--bg); }
+    .btn-success {
+      background: #000000;
+      color: var(--primary);
+    }
+    .btn-success:hover { background: #222222; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+    .btn-lg { padding: 16px 36px; font-size: 1.05rem; }
+    .btn-sm { padding: 8px 16px; font-size: .85rem; }
+
+    /* ─── Original Prompt Page ─── */
+    .page-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 40px;
+      box-shadow: var(--shadow);
+      border-top: 4px solid var(--primary);
+    }
+    .page-title { font-size: 1.6rem; font-weight: 800; margin-bottom: 8px; }
+    .page-subtitle { color: var(--muted); margin-bottom: 28px; font-size: .95rem; }
+    .form-label {
+      font-size: .9rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: block;
+      color: var(--text);
+    }
+    textarea.prompt-input {
+      width: 100%;
+      min-height: 180px;
+      padding: 16px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      font-size: .95rem;
+      font-family: inherit;
+      resize: vertical;
+      transition: border-color .15s;
+      line-height: 1.65;
+      color: var(--text);
+      background: #fdfcf8;
+    }
+    textarea.prompt-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(255,199,44,.2);
+    }
+    .char-count {
+      text-align: right;
+      font-size: .8rem;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+    .form-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 24px;
+    }
+
+    /* ─── Progress Bar ─── */
+    .progress-bar {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 32px;
+    }
+    .progress-step {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex: 1;
+    }
+    .progress-step:last-child .progress-line { display: none; }
+    .step-bubble {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .85rem;
+      font-weight: 800;
+      flex-shrink: 0;
+      border: 2px solid;
+      transition: all .2s;
+      cursor: default;
+    }
+    .step-bubble.done { color: white; }
+    .step-bubble.active { color: #000000; box-shadow: 0 0 0 4px rgba(255,199,44,.25); }
+    .step-bubble.pending { background: var(--surface); color: var(--muted); border-color: var(--border); }
+    .progress-line {
+      flex: 1;
+      height: 2px;
+      background: var(--border);
+      margin: 0 4px;
+      transition: background .3s;
+    }
+    .progress-line.done { background: currentColor; }
+    .step-info {
+      position: absolute;
+      top: 48px;
+      left: 50%;
+      transform: translateX(-50%);
+      white-space: nowrap;
+      font-size: .7rem;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .progress-step-wrap {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .progress-step-label {
+      font-size: .72rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-align: center;
+      white-space: nowrap;
+    }
+    .progress-step-label.active { color: var(--primary); }
+    .progress-step-label.done { color: #000000; }
+    .progress-wrapper {
+      display: flex;
+      align-items: flex-start;
+      gap: 0;
+      margin-bottom: 36px;
+    }
+    .progress-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1;
+      position: relative;
+    }
+    .progress-item-bubble {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .88rem;
+      font-weight: 800;
+      border: 2px solid;
+      transition: all .25s;
+      z-index: 1;
+    }
+    .progress-item-label {
+      font-size: .72rem;
+      font-weight: 600;
+      margin-top: 6px;
+      text-align: center;
+    }
+    .progress-connector {
+      position: absolute;
+      top: 19px;
+      left: calc(50% + 20px);
+      right: calc(-50% + 20px);
+      height: 2px;
+      background: var(--border);
+      z-index: 0;
+    }
+    .progress-item:last-child .progress-connector { display: none; }
+
+    /* ─── Step Page ─── */
+    .step-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    .step-guidance {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 28px;
+      box-shadow: var(--shadow);
+      border-top: 4px solid;
+    }
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .step-letter-badge {
+      width: 52px;
+      height: 52px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+      font-weight: 900;
+      flex-shrink: 0;
+    }
+    .step-title-block .step-word {
+      font-size: 1.25rem;
+      font-weight: 800;
+    }
+    .step-title-block .step-principle {
+      font-size: .82rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .guidance-section { margin-bottom: 22px; }
+    .guidance-section h3 {
+      font-size: .78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .guidance-list { list-style: none; }
+    .guidance-list li {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      font-size: .88rem;
+      color: var(--text);
+      margin-bottom: 8px;
+      line-height: 1.5;
+    }
+    .guidance-list li::before {
+      content: '→';
+      flex-shrink: 0;
+      font-weight: 700;
+      margin-top: 1px;
+    }
+    .question-list { list-style: none; }
+    .question-list li {
+      font-size: .85rem;
+      color: var(--muted);
+      padding: 8px 12px;
+      background: var(--bg);
+      border-radius: 8px;
+      margin-bottom: 6px;
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      line-height: 1.5;
+    }
+    .question-list li::before {
+      content: '?';
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+
+    /* ─── Example Before/After ─── */
+    .example-toggle {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      background: #FFC72C;
+      color: #000000;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      padding: 10px 14px;
+      font-size: .82rem;
+      font-weight: 700;
+      width: 100%;
+      text-align: left;
+      margin-bottom: 10px;
+      transition: background .15s, box-shadow .15s;
+      box-shadow: 0 1px 4px rgba(0,0,0,.15);
+    }
+    .example-toggle:hover {
+      background: #e6b000;
+      box-shadow: 0 3px 10px rgba(0,0,0,.2);
+    }
+    .example-toggle .toggle-arrow {
+      margin-left: auto;
+      font-size: .7rem;
+      transition: transform .2s;
+    }
+    .example-toggle.open .toggle-arrow { transform: rotate(180deg); }
+    .example-body { display: none; }
+    .example-body.open { display: block; }
+    .example-prompt-block {
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: .82rem;
+      line-height: 1.6;
+      font-family: inherit;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--text);
+    }
+    .example-before {
+      background: #f5f5f5;
+      border: 1px solid #cccccc;
+    }
+    .example-after {
+      background: #fffbeb;
+      border: 1.5px solid #FFC72C;
+    }
+    .example-label {
+      font-size: .7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 6px;
+    }
+    .example-label.before { color: #3a3a3a; }  /* 10.7:1 on #f5f5f5 — AAA ✓ */
+    .example-label.after  { color: #064E3B; }  /* 9.29:1 on #fffbeb — AAA ✓ */
+    .example-arrow {
+      text-align: center;
+      font-size: 1rem;
+      color: var(--muted);
+      margin: 6px 0;
+    }
+    .example-change {
+      font-size: .75rem;
+      color: var(--muted);
+      margin-top: 8px;
+      font-style: italic;
+    }
+    .step-editor {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 28px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+    }
+    .step-editor h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .step-editor .editor-hint {
+      font-size: .82rem;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+    .step-editor textarea {
+      flex: 1;
+      min-height: 280px;
+    }
+    .step-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 24px;
+    }
+    .step-counter { font-size: .85rem; color: var(--muted); font-weight: 600; }
+
+    /* ─── Final Page ─── */
+    .final-header {
+      text-align: center;
+      padding: 40px 0 32px;
+    }
+    .final-header .badge {
+      display: inline-block;
+      background: var(--primary);
+      color: #000000;
+      font-size: .8rem;
+      font-weight: 700;
+      padding: 4px 14px;
+      border-radius: 999px;
+      margin-bottom: 14px;
+    }
+    .final-header h1 { font-size: 2rem; font-weight: 800; margin-bottom: 8px; }
+    .final-header p { color: var(--muted); }
+    .final-prompt-box {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 32px;
+      box-shadow: var(--shadow-lg);
+      margin-bottom: 24px;
+      border: 1.5px solid var(--border);
+      border-top: 4px solid var(--primary);
+      position: relative;
+    }
+    .final-prompt-box .box-label {
+      font-size: .75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+    .final-prompt-text {
+      font-size: 1rem;
+      line-height: 1.75;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--text);
+    }
+    .copy-success {
+      display: none;
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: #000000;
+      color: var(--primary);
+      font-size: .8rem;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 6px;
+    }
+    .final-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 40px;
+    }
+    .evolution-section h2 {
+      font-size: 1.2rem;
+      font-weight: 800;
+      margin-bottom: 20px;
+    }
+    .evolution-timeline {
+      position: relative;
+      padding-left: 36px;
+    }
+    .evolution-timeline::before {
+      content: '';
+      position: absolute;
+      left: 13px;
+      top: 24px;
+      bottom: 24px;
+      width: 2px;
+      background: var(--border);
+    }
+    .evolution-item {
+      position: relative;
+      margin-bottom: 24px;
+    }
+    .evolution-dot {
+      position: absolute;
+      left: -30px;
+      top: 14px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 3px solid;
+      background: white;
+    }
+    .evolution-card {
+      background: var(--surface);
+      border-radius: 10px;
+      padding: 18px 22px;
+      box-shadow: var(--shadow);
+      border-left: 3px solid;
+    }
+    .evolution-card .ev-label {
+      font-size: .75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 8px;
+    }
+    .evolution-card .ev-prompt {
+      font-size: .88rem;
+      line-height: 1.7;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* ─── Color theming per step — Expanded AAA palette ─── */
+    /*
+      Three roles per step:
+        --x-color  : accent — badge fills, borders, decorative elements (NOT text on light bg)
+        --x-text   : WCAG AAA text on white AND on step's --x-bg (≥7:1)
+        --x-bg     : light tinted surface for cards/panels
+
+      All --x-text values verified at ≥7:1 on white (#ffffff) for WCAG AAA normal text:
+        C  #6B4A00   8.10:1  AAA ✓   (NKU Gold family — dark amber)
+        L  #1E3A8A   9.98:1  AAA ✓   (Blue)
+        E  #4C1D95  10.82:1  AAA ✓   (Purple/Violet)
+        A  #164E63   8.68:1  AAA ✓   (Teal/Cyan)
+        R  #064E3B   9.29:1  AAA ✓   (Green)
+
+      Badge text (white or black) verified at ≥4.5:1 on each --x-color fill
+      (WCAG AAA for large text ≥18pt or 14pt bold):
+        C  black  #000 on #FFC72C  → 8.59:1  AAA large ✓
+        L  white  #fff on #2563EB  → 4.84:1  AAA large ✓
+        E  white  #fff on #7C3AED  → 5.50:1  AAA large ✓
+        A  white  #fff on #0E7490  → 5.10:1  AAA large ✓
+        R  white  #fff on #047857  → 5.22:1  AAA large ✓
+    */
+    :root {
+      --c-color: #FFC72C;   --c-text: #6B4A00;   --c-bg: #fffbeb;
+      --l-color: #2563EB;   --l-text: #1E3A8A;   --l-bg: #eff6ff;
+      --e-color: #7C3AED;   --e-text: #4C1D95;   --e-bg: #f5f3ff;
+      --a-color: #0E7490;   --a-text: #164E63;   --a-bg: #ecfeff;
+      --r-color: #047857;   --r-text: #064E3B;   --r-bg: #ecfdf5;
+    }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 700px) {
+      .clear-grid { grid-template-columns: repeat(3, 1fr); }
+      .step-layout { grid-template-columns: 1fr; }
+      .container { padding: 24px 16px; }
+      .page-card { padding: 24px; }
+      .intro-hero h1 { font-size: 2rem; }
+    }
+    @media (max-width: 480px) {
+      .clear-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* ─── Animations ─── */
+    .fade-in {
+      animation: fadeIn .3s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ─── Tooltip-style copy button area ─── */
+    .copy-btn-wrap { position: relative; }
+    .copy-tip {
+      display: none;
+      position: absolute;
+      top: -32px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e293b;
+      color: white;
+      font-size: .75rem;
+      padding: 4px 10px;
+      border-radius: 6px;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     PAGE: INTRO
+══════════════════════════════════════════ -->
+<div id="page-intro" class="page active">
+  <header class="app-header">
+    <div class="logo">CLEAR <span>Prompt Refiner</span></div>
+    <div class="subtitle">AI Prompt Engineering Tool</div>
+  </header>
+  <div class="container">
+    <div class="intro-hero fade-in">
+      <h1><em>The</em> <strong>CLEAR</strong> <em>Framework</em></h1>
+      <p>Craft better AI prompts step-by-step using Dr. Leo S. Lo's research-backed CLEAR Framework — a structured approach to prompt engineering.</p>
+    </div>
+
+    <div class="clear-grid fade-in">
+      <div class="clear-card" style="border-color: var(--c-color); background: var(--c-bg)">
+        <div class="letter-badge" style="background: var(--c-color); color: #000000">C</div>
+        <div class="word" style="color: var(--c-text)">Concise</div>
+        <div class="desc">Use clear, simple language. Eliminate unnecessary words so the AI focuses on what matters.</div>
+      </div>
+      <div class="clear-card" style="border-color: var(--l-color); background: var(--l-bg)">
+        <div class="letter-badge" style="background: var(--l-color); color: #ffffff">L</div>
+        <div class="word" style="color: var(--l-text)">Logical</div>
+        <div class="desc">Structure prompts in a coherent sequence with intentional order of ideas and context.</div>
+      </div>
+      <div class="clear-card" style="border-color: var(--e-color); background: var(--e-bg)">
+        <div class="letter-badge" style="background: var(--e-color); color: #ffffff">E</div>
+        <div class="word" style="color: var(--e-text)">Explicit</div>
+        <div class="desc">Specify format, scope, tone, reading level, persona, and examples for the output.</div>
+      </div>
+      <div class="clear-card" style="border-color: var(--a-color); background: var(--a-bg)">
+        <div class="letter-badge" style="background: var(--a-color); color: #ffffff">A</div>
+        <div class="word" style="color: var(--a-text)">Adaptive</div>
+        <div class="desc">Remain flexible. Rephrase or decompose complex tasks as you refine your approach.</div>
+      </div>
+      <div class="clear-card" style="border-color: var(--r-color); background: var(--r-bg)">
+        <div class="letter-badge" style="background: var(--r-color); color: #ffffff">R</div>
+        <div class="word" style="color: var(--r-text)">Reflective</div>
+        <div class="desc">Evaluate AI output for accuracy. Continuously refine based on what you learn.</div>
+      </div>
+    </div>
+
+    <div class="attribution">
+      Based on the research of <strong>Dr. Leo S. Lo</strong> — published in <em>The Journal of Academic Librarianship</em>, Vol. 49, Issue 4, 2023.
+      <br><a href="https://doi.org/10.1016/j.acalib.2023.102720" target="_blank" rel="noopener noreferrer" class="doi-link">doi.org/10.1016/j.acalib.2023.102720</a>
+    </div>
+
+    <div style="text-align: center;">
+      <button class="btn btn-primary btn-lg" onclick="goToOriginal()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+        Start Refining Your Prompt
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PAGE: ORIGINAL PROMPT
+══════════════════════════════════════════ -->
+<div id="page-original" class="page">
+  <header class="app-header">
+    <div class="logo">CLEAR <span>Prompt Refiner</span></div>
+    <button class="btn btn-ghost btn-sm" onclick="goToIntro()">← Back</button>
+  </header>
+  <div class="container">
+    <div class="page-card fade-in">
+      <h1 class="page-title">Enter Your Original Prompt</h1>
+      <p class="page-subtitle">Type or paste the prompt you want to refine. Don't worry about perfecting it — that's what CLEAR is for. Just write it as you naturally would.</p>
+
+      <label class="form-label" for="original-prompt-input">Your Prompt</label>
+      <textarea
+        id="original-prompt-input"
+        class="prompt-input"
+        placeholder="e.g. Write me something about climate change for my students..."
+        oninput="updateCharCount('original-prompt-input', 'orig-count')"
+        onkeydown="handleOriginalKey(event)"
+      ></textarea>
+      <div class="char-count" id="orig-count">0 characters</div>
+
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="startCLEAR()">
+          Begin CLEAR Refinement
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PAGE: STEP (C / L / E / A / R)
+══════════════════════════════════════════ -->
+<div id="page-step" class="page">
+  <header class="app-header">
+    <div class="logo">CLEAR <span>Prompt Refiner</span></div>
+    <div id="header-step-label" class="subtitle"></div>
+  </header>
+  <div class="container">
+    <!-- Progress -->
+    <div class="progress-wrapper" id="progress-bar"></div>
+
+    <!-- Step Layout -->
+    <div class="step-layout fade-in">
+      <!-- Left: Guidance -->
+      <div class="step-guidance" id="step-guidance-card">
+        <div class="step-header">
+          <div class="step-letter-badge" id="step-badge"></div>
+          <div class="step-title-block">
+            <div class="step-word" id="step-word"></div>
+            <div class="step-principle" id="step-principle"></div>
+          </div>
+        </div>
+
+        <div class="guidance-section">
+          <h3>Key Principles</h3>
+          <ul class="guidance-list" id="guidance-list"></ul>
+        </div>
+
+        <div class="guidance-section">
+          <h3>Reflect on These Questions</h3>
+          <ul class="question-list" id="question-list"></ul>
+        </div>
+
+        <div class="guidance-section">
+          <button class="example-toggle" id="example-toggle" onclick="toggleExample()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            See It in Action
+            <span class="toggle-arrow">▼</span>
+          </button>
+          <div class="example-body" id="example-body">
+            <div class="example-label before">Before this step</div>
+            <div class="example-prompt-block example-before" id="example-before"></div>
+            <div class="example-arrow">↓ apply <span id="example-step-word"></span></div>
+            <div class="example-label after">After this step</div>
+            <div class="example-prompt-block example-after" id="example-after"></div>
+            <div class="example-change" id="example-change"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Editor -->
+      <div class="step-editor">
+        <h3>Refine Your Prompt</h3>
+        <p class="editor-hint" id="editor-hint"></p>
+        <textarea
+          id="step-prompt-input"
+          class="prompt-input"
+          oninput="updateCharCount('step-prompt-input', 'step-count')"
+        ></textarea>
+        <div class="char-count" id="step-count">0 characters</div>
+      </div>
+    </div>
+
+    <!-- Navigation -->
+    <div class="step-nav">
+      <button class="btn btn-secondary" onclick="prevStep()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        Back
+      </button>
+      <span class="step-counter" id="step-counter"></span>
+      <button class="btn btn-primary" onclick="nextStep()">
+        <span id="next-btn-label">Next Step</span>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PAGE: FINAL
+══════════════════════════════════════════ -->
+<div id="page-final" class="page">
+  <header class="app-header">
+    <div class="logo">CLEAR <span>Prompt Refiner</span></div>
+    <button class="btn btn-ghost btn-sm" onclick="startOver()">Start Over</button>
+  </header>
+  <div class="container">
+    <div class="final-header fade-in">
+      <div class="badge">✓ CLEAR Complete</div>
+      <h1>Your Refined Prompt</h1>
+      <p>All five CLEAR dimensions applied. Copy your prompt or download the full refinement journey as a PDF.</p>
+    </div>
+
+    <div class="final-prompt-box fade-in">
+      <div class="box-label">Final Refined Prompt</div>
+      <div class="final-prompt-text" id="final-prompt-display"></div>
+      <span class="copy-success" id="copy-success-badge">Copied!</span>
+    </div>
+
+    <div class="final-actions fade-in">
+      <div class="copy-btn-wrap">
+        <span class="copy-tip" id="copy-tip">Copy to clipboard</span>
+        <button class="btn btn-primary" onclick="copyFinalPrompt()" onmouseenter="showTip()" onmouseleave="hideTip()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy Prompt
+        </button>
+      </div>
+      <button class="btn btn-success" onclick="downloadPDF()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download Evolution as PDF
+      </button>
+      <button class="btn btn-secondary" onclick="startOver()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Refine Another Prompt
+      </button>
+    </div>
+
+    <!-- Evolution Timeline -->
+    <div class="evolution-section fade-in">
+      <h2>Prompt Evolution</h2>
+      <div class="evolution-timeline" id="evolution-timeline"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════
+const state = {
+  originalPrompt: '',
+  promptHistory: [],  // [{step, label, prompt}]
+  currentStep: 0,
+};
+
+// ═══════════════════════════════════════════════
+//  CLEAR STEP DEFINITIONS
+// ═══════════════════════════════════════════════
+const STEPS = [
+  {
+    letter: 'C',
+    word: 'Concise',
+    color: '#FFC72C',
+    textColor: '#6B4A00',    // 8.10:1 on white — WCAG AAA ✓
+    badgeTextColor: '#000000',
+    bgColor: '#fffbeb',
+    principle: 'Use clear, direct language — eliminate unnecessary words.',
+    hint: 'Trim your prompt to its essentials. Remove filler phrases, redundant wording, and conventional politeness so the AI focuses on what truly matters.',
+    guidance: [
+      'Eliminate filler words and redundant phrases',
+      'Use simple, precise language instead of complex or flowery wording',
+      'Skip conventional politeness ("Please kindly…") — it dilutes your intent',
+      'Break overly broad requests into focused, targeted ones',
+      'Every word should earn its place in the prompt',
+    ],
+    questions: [
+      'Can any words or phrases be removed without losing meaning?',
+      'Are there simpler alternatives to any complex wording?',
+      'Does your prompt get to the point quickly?',
+    ],
+    example: {
+      before: 'Could you please help me write something about climate change that I could use for my class? I would really appreciate it if you could help me with this.',
+      after: 'Write an educational piece on climate change for my class.',
+      change: 'Removed the double request, filler phrases ("Could you please…", "I would really appreciate it"), and the vague trailing clause. The core ask is now one direct sentence.',
+    },
+  },
+  {
+    letter: 'L',
+    word: 'Logical',
+    color: '#2563EB',
+    textColor: '#1E3A8A',    // 9.98:1 on white — WCAG AAA ✓
+    badgeTextColor: '#ffffff',
+    bgColor: '#eff6ff',
+    principle: 'Structure your prompt in a coherent, intentional sequence.',
+    hint: 'Organize your prompt so context comes first, then the task, then any specific requirements. Ensure the flow helps the AI understand the "why" before the "what."',
+    guidance: [
+      'Provide relevant background context before stating the task',
+      'Organize information from general to specific',
+      'Group related instructions together — don\'t scatter them',
+      'Ensure any numbered steps or sequences are in logical order',
+      'Make cause-and-effect or conditional relationships explicit',
+    ],
+    questions: [
+      'Does your prompt flow in a logical order that builds understanding?',
+      'Have you provided context before stating the task?',
+      'Are all related instructions grouped and clearly connected?',
+    ],
+    example: {
+      before: 'Write an educational piece on climate change for my class.',
+      after: 'I teach 10th-grade science. Write an educational piece on climate change. Cover these topics in order: (1) what climate change is, (2) its main causes, (3) its global effects, (4) what students can do.',
+      change: 'Added who the audience is (context first), then stated the task, then provided a logical four-part structure. The AI now has a clear roadmap to follow.',
+    },
+  },
+  {
+    letter: 'E',
+    word: 'Explicit',
+    color: '#7C3AED',
+    textColor: '#4C1D95',    // 10.82:1 on white — WCAG AAA ✓
+    badgeTextColor: '#ffffff',
+    bgColor: '#f5f3ff',
+    principle: 'Specify exactly what you want — leave no room for ambiguity.',
+    hint: 'Add explicit detail about the output format, length, tone, target audience, persona, and any constraints. The more specific you are, the more useful the AI\'s response.',
+    guidance: [
+      'State the desired output format (bullet list, essay, code, table, etc.)',
+      'Specify the target audience or expertise level',
+      'Indicate the tone and style (formal, casual, technical, conversational)',
+      'Set scope constraints (length, word count, depth of coverage)',
+      'Assign a persona or role to the AI if it would help (e.g., "Act as a…")',
+      'Include illustrative examples of what a good response looks like',
+    ],
+    questions: [
+      'Have you specified the desired output format?',
+      'Is the target audience or expertise level identified?',
+      'Are tone, style, and length constraints clearly stated?',
+      'Would adding an example clarify what success looks like?',
+    ],
+    example: {
+      before: 'I teach 10th-grade science. Write an educational piece on climate change. Cover these topics in order: (1) what climate change is, (2) its main causes, (3) its global effects, (4) what students can do.',
+      after: 'I teach 10th-grade science (students ages 15–16). Write a 500-word explainer on climate change with four clearly labeled sections: (1) Definition, (2) Key Causes, (3) Global Effects, (4) Student Actions. Use accessible, engaging language. Include one real-world statistic per section.',
+      change: 'Added age range, word count target, section labels, language tone ("accessible, engaging"), and a formatting requirement (one statistic per section). Nothing is left to guesswork.',
+    },
+  },
+  {
+    letter: 'A',
+    word: 'Adaptive',
+    color: '#0E7490',
+    textColor: '#164E63',    // 8.68:1 on white — WCAG AAA ✓
+    badgeTextColor: '#ffffff',
+    bgColor: '#ecfeff',
+    principle: 'Tailor your approach and anticipate how the AI will interpret your prompt.',
+    hint: 'Think about how an AI might misread your prompt. Add clarifications, reframe complex ideas, or decompose multi-part tasks into simpler components.',
+    guidance: [
+      'Anticipate potential misinterpretations and preempt them with clarifications',
+      'Decompose complex multi-part requests into clearly separated sub-tasks',
+      'Use few-shot examples (show the AI a sample input → output pair) if the format is tricky',
+      'Specify what the AI should NOT do or include, if relevant',
+      'Consider whether the task needs a chain-of-thought instruction ("Think step by step…")',
+    ],
+    questions: [
+      'How might the AI misinterpret your prompt — and can you prevent it?',
+      'Is the task too complex? Could breaking it into parts help?',
+      'Would a sample example make the expected output clearer?',
+      'Are there assumptions in your prompt the AI might not share?',
+    ],
+    example: {
+      before: 'I teach 10th-grade science (students ages 15–16). Write a 500-word explainer on climate change with four clearly labeled sections: (1) Definition, (2) Key Causes, (3) Global Effects, (4) Student Actions. Use accessible, engaging language. Include one real-world statistic per section.',
+      after: 'You are an experienced science educator writing for a 10th-grade classroom (ages 15–16). Write a 500-word explainer on climate change with four labeled sections: (1) Definition, (2) Key Causes, (3) Global Effects, (4) Student Actions. Use accessible language — briefly define any scientific terms you use. Include one current statistic with its source per section. Do not include debates about climate policy.',
+      change: 'Added a role ("You are an experienced science educator") to steer the AI\'s voice. Added a guardrail ("do not include policy debates") to prevent a common drift. Clarified that scientific terms need brief definitions.',
+    },
+  },
+  {
+    letter: 'R',
+    word: 'Reflective',
+    color: '#047857',
+    textColor: '#064E3B',    // 9.29:1 on white — WCAG AAA ✓
+    badgeTextColor: '#ffffff',
+    bgColor: '#ecfdf5',
+    principle: 'Critically evaluate your prompt and continuously refine it.',
+    hint: 'Step back and review the whole prompt as if you\'re seeing it for the first time. Identify hidden assumptions, missing context, or anything that could lead the AI astray.',
+    guidance: [
+      'Re-read the full prompt and check it against your actual goal',
+      'Identify any assumptions the AI couldn\'t know and state them explicitly',
+      'Consider edge cases or unintended interpretations',
+      'Verify that every instruction is consistent — nothing contradicts anything else',
+      'Add any evaluation criteria that would help you assess the AI\'s response',
+    ],
+    questions: [
+      'Does this prompt truly capture what you want to achieve?',
+      'What critical context might the AI be missing?',
+      'Are there any contradictions or inconsistencies in the instructions?',
+      'How will you know if the AI\'s response is a good one?',
+    ],
+    example: {
+      before: 'You are an experienced science educator writing for a 10th-grade classroom (ages 15–16). Write a 500-word explainer on climate change with four labeled sections: (1) Definition, (2) Key Causes, (3) Global Effects, (4) Student Actions. Use accessible language — briefly define any scientific terms you use. Include one current statistic with its source per section. Do not include debates about climate policy.',
+      after: 'You are an experienced science educator writing for a U.S. 10th-grade classroom (ages 15–16) with basic biology knowledge but limited prior exposure to climate science. Write a 500-word explainer on climate change with four labeled sections: (1) Definition, (2) Key Causes, (3) Global Effects, (4) Two Concrete Actions Students Can Take. Use clear, engaging language and briefly define scientific terms. Include one current, cited statistic per section. Focus on scientific consensus — omit policy debates. The goal is to build understanding and a sense of agency, not anxiety.',
+      change: 'Added U.S. context and prior knowledge level (hidden assumptions). Sharpened "Student Actions" to "Two Concrete Actions" to prevent vague suggestions. Added the goal statement at the end — now the AI knows the emotional tone to strike.',
+    },
+  },
+];
+
+// ═══════════════════════════════════════════════
+//  PAGE NAVIGATION
+// ═══════════════════════════════════════════════
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const el = document.getElementById(id);
+  el.classList.add('active');
+  // Trigger fade-in re-animation
+  el.querySelectorAll('.fade-in').forEach(el => {
+    el.style.animation = 'none';
+    el.offsetHeight; // reflow
+    el.style.animation = '';
+  });
+  window.scrollTo(0, 0);
+}
+
+function goToIntro() { showPage('page-intro'); }
+
+function goToOriginal() { showPage('page-original'); }
+
+// ═══════════════════════════════════════════════
+//  CHAR COUNT
+// ═══════════════════════════════════════════════
+function updateCharCount(inputId, countId) {
+  const len = document.getElementById(inputId).value.length;
+  const words = document.getElementById(inputId).value.trim().split(/\s+/).filter(w => w).length;
+  document.getElementById(countId).textContent = `${len} characters · ${words} words`;
+}
+
+// ═══════════════════════════════════════════════
+//  ORIGINAL PROMPT → START
+// ═══════════════════════════════════════════════
+function handleOriginalKey(e) {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) startCLEAR();
+}
+
+function startCLEAR() {
+  const prompt = document.getElementById('original-prompt-input').value.trim();
+  if (!prompt) {
+    document.getElementById('original-prompt-input').focus();
+    document.getElementById('original-prompt-input').style.borderColor = '#ef4444';
+    setTimeout(() => {
+      document.getElementById('original-prompt-input').style.borderColor = '';
+    }, 2000);
+    return;
+  }
+  state.originalPrompt = prompt;
+  state.promptHistory = [{ step: 'Original', label: 'Original Prompt', prompt }];
+  state.currentStep = 0;
+  renderStep();
+  showPage('page-step');
+}
+
+// ═══════════════════════════════════════════════
+//  RENDER STEP
+// ═══════════════════════════════════════════════
+function renderStep() {
+  const step = STEPS[state.currentStep];
+  const currentPrompt = state.promptHistory[state.promptHistory.length - 1].prompt;
+
+  // Header
+  document.getElementById('header-step-label').textContent =
+    `Step ${state.currentStep + 1} of 5 — ${step.letter}: ${step.word}`;
+
+  // Progress bar
+  renderProgress();
+
+  // Guidance card
+  const guidanceCard = document.getElementById('step-guidance-card');
+  guidanceCard.style.borderTopColor = step.color;
+
+  // Badge — solid fill so accent color is background, not text
+  const badge = document.getElementById('step-badge');
+  badge.style.background = step.color;
+  badge.style.color = step.badgeTextColor;
+  badge.textContent = step.letter;
+
+  document.getElementById('step-word').textContent = step.word;
+  document.getElementById('step-word').style.color = step.textColor;   // accessible dark variant
+  document.getElementById('step-principle').textContent = step.principle;
+
+  // Guidance list
+  const gList = document.getElementById('guidance-list');
+  gList.innerHTML = step.guidance.map(g =>
+    `<li>${escapeHtml(g)}</li>`
+  ).join('');
+  // Arrow color inherits from var(--text) — no inline override needed
+  gList.querySelectorAll('li').forEach(li => {
+    li.style.setProperty('--c', step.textColor);
+  });
+
+  // Question list
+  const qList = document.getElementById('question-list');
+  qList.innerHTML = step.questions.map(q =>
+    `<li>${escapeHtml(q)}</li>`
+  ).join('');
+
+  // Example section
+  document.getElementById('example-before').textContent = step.example.before;
+  document.getElementById('example-after').textContent = step.example.after;
+  document.getElementById('example-change').textContent = '✦ ' + step.example.change;
+  document.getElementById('example-step-word').textContent = step.word;
+  document.getElementById('example-step-word').style.color = step.textColor;  // accessible
+  // Reset toggle state on step change
+  const toggle = document.getElementById('example-toggle');
+  const body = document.getElementById('example-body');
+  toggle.classList.remove('open');
+  body.classList.remove('open');
+  // toggle color is handled by CSS (.example-toggle { background: #FFC72C; color: #000 })
+
+  // Editor
+  document.getElementById('editor-hint').textContent = step.hint;
+  const textarea = document.getElementById('step-prompt-input');
+
+  // Check if we already have a saved prompt for this step (user went back and came forward)
+  const existingEntry = state.promptHistory.find(h => h.step === step.letter);
+  textarea.value = existingEntry ? existingEntry.prompt : currentPrompt;
+  updateCharCount('step-prompt-input', 'step-count');
+
+  // Nav
+  document.getElementById('step-counter').textContent =
+    `Step ${state.currentStep + 1} of ${STEPS.length}`;
+  document.getElementById('next-btn-label').textContent =
+    state.currentStep === STEPS.length - 1 ? 'See Final Prompt' : 'Next Step';
+}
+
+function renderProgress() {
+  const bar = document.getElementById('progress-bar');
+  bar.innerHTML = STEPS.map((s, i) => {
+    const isDone = i < state.currentStep;
+    const isActive = i === state.currentStep;
+    let bubbleStyle, labelClass, bubbleBg;
+    if (isDone) {
+      bubbleBg = s.color;
+      labelClass = 'done';
+    } else if (isActive) {
+      bubbleBg = s.color;
+      labelClass = 'active';
+    } else {
+      bubbleBg = 'white';
+      labelClass = 'pending';
+    }
+    // Use step's badgeTextColor for text on filled bubbles (already contrast-tested)
+    const bubbleTextColor = (isDone || isActive) ? s.badgeTextColor : '#aaaaaa';
+    const borderColor = (isDone || isActive) ? s.color : '#dddddd';
+
+    const connectorStyle = isDone ? `background: #000000` : '';
+
+    // Labels: use textColor (accessible dark variant) for active/done, gray for pending
+    const labelColor = isActive ? s.textColor : (isDone ? '#000000' : '#aaaaaa');
+
+    return `
+      <div class="progress-item">
+        <div class="progress-item-bubble"
+          style="background: ${bubbleBg}; color: ${bubbleTextColor}; border-color: ${borderColor}">
+          ${isDone ? '✓' : s.letter}
+        </div>
+        <div class="progress-item-label" style="color: ${labelColor}">${s.word}</div>
+        <div class="progress-connector" style="${connectorStyle}"></div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════
+function saveCurrentStepPrompt() {
+  const step = STEPS[state.currentStep];
+  const prompt = document.getElementById('step-prompt-input').value.trim() ||
+    state.promptHistory[state.promptHistory.length - 1].prompt;
+
+  // Remove any existing entry for this step and later steps
+  state.promptHistory = state.promptHistory.filter(h =>
+    !STEPS.slice(state.currentStep).map(s => s.letter).includes(h.step)
+  );
+  state.promptHistory.push({ step: step.letter, label: `${step.letter} — ${step.word}`, prompt });
+}
+
+function nextStep() {
+  saveCurrentStepPrompt();
+
+  if (state.currentStep === STEPS.length - 1) {
+    renderFinal();
+    showPage('page-final');
+    return;
+  }
+
+  state.currentStep++;
+  renderStep();
+  // Animate
+  const layout = document.querySelector('.step-layout');
+  layout.style.opacity = '0';
+  layout.style.transform = 'translateX(20px)';
+  setTimeout(() => {
+    layout.style.transition = 'opacity .25s, transform .25s';
+    layout.style.opacity = '1';
+    layout.style.transform = 'translateX(0)';
+  }, 10);
+}
+
+function prevStep() {
+  saveCurrentStepPrompt();
+
+  if (state.currentStep === 0) {
+    showPage('page-original');
+    return;
+  }
+
+  state.currentStep--;
+  renderStep();
+}
+
+// ═══════════════════════════════════════════════
+//  FINAL PAGE
+// ═══════════════════════════════════════════════
+function renderFinal() {
+  const finalEntry = state.promptHistory[state.promptHistory.length - 1];
+  document.getElementById('final-prompt-display').textContent = finalEntry.prompt;
+
+  // Build evolution timeline
+  const timeline = document.getElementById('evolution-timeline');
+  timeline.innerHTML = state.promptHistory.map((entry, i) => {
+    const stepDef = i === 0 ? null : STEPS.find(s => s.letter === entry.step);
+    const accentColor = stepDef ? stepDef.color : '#999999';       // border/dot fill
+    const labelColor  = stepDef ? stepDef.textColor : '#666666';   // accessible text
+    const isLast = i === state.promptHistory.length - 1;
+
+    return `
+      <div class="evolution-item">
+        <div class="evolution-dot" style="border-color: ${accentColor}; ${isLast ? `background: ${accentColor}` : ''}"></div>
+        <div class="evolution-card" style="border-left-color: ${accentColor}">
+          <div class="ev-label" style="color: ${labelColor}">${escapeHtml(entry.label)}</div>
+          <div class="ev-prompt">${escapeHtml(entry.prompt)}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════
+//  COPY PROMPT
+// ═══════════════════════════════════════════════
+function copyFinalPrompt() {
+  const text = document.getElementById('final-prompt-display').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const badge = document.getElementById('copy-success-badge');
+    badge.style.display = 'block';
+    setTimeout(() => { badge.style.display = 'none'; }, 2000);
+  }).catch(() => {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    const badge = document.getElementById('copy-success-badge');
+    badge.style.display = 'block';
+    setTimeout(() => { badge.style.display = 'none'; }, 2000);
+  });
+}
+
+function showTip() { document.getElementById('copy-tip').style.display = 'block'; }
+function hideTip() { document.getElementById('copy-tip').style.display = 'none'; }
+
+// ═══════════════════════════════════════════════
+//  START OVER
+// ═══════════════════════════════════════════════
+function startOver() {
+  state.originalPrompt = '';
+  state.promptHistory = [];
+  state.currentStep = 0;
+  document.getElementById('original-prompt-input').value = '';
+  document.getElementById('orig-count').textContent = '0 characters';
+  showPage('page-original');
+}
+
+// ═══════════════════════════════════════════════
+//  PDF GENERATION
+// ═══════════════════════════════════════════════
+function downloadPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 60;
+  const contentW = pageW - margin * 2;
+
+  const colors = {
+    primary: [255, 199, 44],  // NKU Gold #FFC72C — badge fills, borders only
+    black:   [0, 0, 0],       // NKU Black
+    text:    [17, 17, 17],
+    muted:   [85, 85, 85],    // #555555  7.55:1 on white — AAA ✓
+    light:   [250, 248, 242],
+    white:   [255, 255, 255],
+    // Accent fills (badges, left-bars, decorative borders)
+    C: [255, 199, 44],   // #FFC72C  NKU Gold
+    L: [37,  99,  235],  // #2563EB  Blue
+    E: [124, 58,  237],  // #7C3AED  Purple
+    A: [14,  116, 144],  // #0E7490  Teal
+    R: [4,   120, 87],   // #047857  Green
+    // Text-safe variants — all ≥7:1 on white — WCAG AAA ✓
+    CT: [107, 74,  0],   // #6B4A00   8.10:1
+    LT: [30,  58,  138], // #1E3A8A   9.98:1
+    ET: [76,  29,  149], // #4C1D95  10.82:1
+    AT: [22,  78,  99],  // #164E63   8.68:1
+    RT: [6,   78,  59],  // #064E3B   9.29:1
+    // Badge text (black or white, per step)
+    CB: [0,   0,   0],   // black on gold
+    LB: [255, 255, 255], // white on blue
+    EB: [255, 255, 255], // white on purple
+    AB: [255, 255, 255], // white on teal
+    RB: [255, 255, 255], // white on green
+  };
+
+  let y = 0;
+
+  function checkPage(needed) {
+    if (y + needed > pageH - margin) {
+      doc.addPage();
+      y = margin;
+    }
+  }
+
+  function drawHeader(pageNum) {
+    // Black bar with gold left accent stripe
+    doc.setFillColor(...colors.black);
+    doc.rect(0, 0, pageW, 40, 'F');
+    doc.setFillColor(...colors.primary);
+    doc.rect(0, 37, pageW, 3, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(...colors.primary);
+    doc.text('CLEAR', margin, 26);
+    doc.setTextColor(...colors.white);
+    doc.text(' Prompt Refiner', margin + 32, 26);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(170, 170, 170);
+    doc.text(`Prompt Evolution Report · ${new Date().toLocaleDateString('en-US', {month:'long',day:'numeric',year:'numeric'})}`, pageW - margin, 26, { align: 'right' });
+  }
+
+  // ── Cover Page ──
+  drawHeader(1);
+
+  // Big CLEAR letters
+  doc.setFontSize(64);
+  doc.setFont('helvetica', 'bold');
+  const letters = ['C','L','E','A','R'];
+  const stepColors    = [colors.C,  colors.L,  colors.E,  colors.A,  colors.R];
+  const stepTextColors= [colors.CT, colors.LT, colors.ET, colors.AT, colors.RT];  // AAA text
+  const badgeText     = [colors.CB, colors.LB, colors.EB, colors.AB, colors.RB]; // badge text
+  const letW = contentW / 5;
+
+  // Draw letter as a colored badge (fill + accessible text) instead of just colored text
+  letters.forEach((l, i) => {
+    const cx = margin + letW * i + letW/2;
+    doc.setFillColor(...stepColors[i]);
+    doc.roundedRect(cx - 22, 130, 44, 44, 6, 6, 'F');
+    doc.setFontSize(28);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...badgeText[i]);
+    doc.text(l, cx, 159, { align: 'center' });
+  });
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  const words = ['Concise','Logical','Explicit','Adaptive','Reflective'];
+  words.forEach((w, i) => {
+    doc.setTextColor(...stepTextColors[i]);
+    doc.text(w, margin + letW * i + letW/2, 184, { align: 'center' });
+  });
+
+  doc.setFontSize(26);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...colors.text);
+  doc.text('Prompt Refinement Journey', pageW / 2, 220, { align: 'center' });
+
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...colors.muted);
+  const subLines = doc.splitTextToSize(
+    'A structured prompt engineering exercise using the CLEAR Framework by Dr. Leo S. Lo. The Journal of Academic Librarianship, Vol. 49, Issue 4, 2023. doi.org/10.1016/j.acalib.2023.102720',
+    contentW - 80
+  );
+  doc.text(subLines, pageW / 2, 246, { align: 'center' });
+
+  // Divider
+  doc.setDrawColor(...colors.primary);
+  doc.setLineWidth(1);
+  doc.line(margin + 60, 276, pageW - margin - 60, 276);
+
+  // Summary stats
+  const totalSteps = state.promptHistory.length - 1;
+  const originalLen = state.promptHistory[0].prompt.length;
+  const finalLen = state.promptHistory[state.promptHistory.length - 1].prompt.length;
+  const delta = finalLen - originalLen;
+  const deltaStr = delta >= 0 ? `+${delta}` : `${delta}`;
+
+  const stats = [
+    { label: 'Refinement Steps', value: String(totalSteps) },
+    { label: 'Original Length', value: `${originalLen} chars` },
+    { label: 'Final Length', value: `${finalLen} chars` },
+    { label: 'Net Change', value: `${deltaStr} chars` },
+  ];
+  const statW = contentW / 4;
+  stats.forEach((s, i) => {
+    const sx = margin + statW * i + statW / 2;
+    // Gold pill background behind stat value
+    doc.setFillColor(...colors.primary);
+    doc.roundedRect(sx - 30, 294, 60, 22, 4, 4, 'F');
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...colors.black);
+    doc.text(s.value, sx, 309, { align: 'center' });
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...colors.muted);
+    doc.text(s.label, sx, 326, { align: 'center' });
+  });
+
+  // ── Prompt Evolution Pages ──
+  doc.addPage();
+  drawHeader();
+  y = margin + 16;
+
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...colors.text);
+  doc.text('Prompt Evolution', margin, y);
+  y += 24;
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...colors.muted);
+  doc.text('Each section shows the prompt state after applying the corresponding CLEAR dimension.', margin, y);
+  y += 24;
+
+  state.promptHistory.forEach((entry, idx) => {
+    const stepDef = idx === 0 ? null : STEPS.find(s => s.letter === entry.step);
+    const stepIdx  = stepDef ? STEPS.indexOf(stepDef) : -1;
+    const accentRgb   = stepIdx >= 0 ? stepColors[stepIdx]     : [153, 153, 153]; // border/fill
+    const labelRgb    = stepIdx >= 0 ? stepTextColors[stepIdx]  : [90, 90, 90];   // accessible text
+
+    const promptLines = doc.splitTextToSize(entry.prompt, contentW - 24);
+    const blockH = 14 + 8 + promptLines.length * 13 + 20;
+
+    checkPage(blockH + 16);
+
+    // Step label — uses accessible text color, not the raw accent
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...labelRgb);
+    doc.text(entry.label.toUpperCase(), margin, y);
+    y += 12;
+
+    // Colored left bar + light background — accent color fine here (not text)
+    doc.setFillColor(...accentRgb);
+    doc.rect(margin, y, 3, blockH - 20, 'F');
+
+    doc.setFillColor(248, 250, 255);
+    doc.roundedRect(margin + 3, y, contentW - 3, blockH - 20, 4, 4, 'F');
+
+    // Prompt text
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...colors.text);
+    doc.text(promptLines, margin + 16, y + 13);
+
+    y += blockH - 4;
+
+    // Arrow connector (except last)
+    if (idx < state.promptHistory.length - 1) {
+      checkPage(24);
+      doc.setDrawColor(...colors.muted);
+      doc.setLineWidth(0.5);
+      doc.line(margin + contentW / 2, y, margin + contentW / 2, y + 12);
+      doc.setFillColor(...colors.muted);
+      // Arrow head (triangle)
+      doc.triangle(
+        margin + contentW / 2, y + 16,
+        margin + contentW / 2 - 5, y + 8,
+        margin + contentW / 2 + 5, y + 8,
+        'F'
+      );
+      y += 22;
+    }
+  });
+
+  // ── CLEAR Framework Reference Page ──
+  doc.addPage();
+  drawHeader();
+  y = margin + 16;
+
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...colors.text);
+  doc.text('CLEAR Framework Reference', margin, y);
+  y += 10;
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...colors.muted);
+  doc.text('Dr. Leo S. Lo · The Journal of Academic Librarianship, Vol. 49, Issue 4, 2023 · doi.org/10.1016/j.acalib.2023.102720', margin, y);
+  y += 24;
+
+  STEPS.forEach((step, i) => {
+    const sc  = stepColors[i];      // accent — used as background fill
+    const stc = stepTextColors[i];  // accessible text variant
+    checkPage(90);
+
+    // Letter circle — accent as fill, badgeText as text (both contrast-tested)
+    doc.setFillColor(...sc);
+    doc.circle(margin + 16, y + 14, 14, 'F');
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...badgeText[i]);
+    doc.text(step.letter, margin + 16, y + 19, { align: 'center' });
+
+    // Word — use accessible text color, not raw accent
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...stc);
+    doc.text(step.word, margin + 38, y + 13);
+
+    // Principle
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(...colors.muted);
+    doc.text(step.principle, margin + 38, y + 24);
+
+    // Key principles
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...colors.text);
+    let gy = y + 36;
+    step.guidance.slice(0, 3).forEach(g => {
+      doc.setFillColor(...sc);
+      doc.circle(margin + 44, gy - 2, 2, 'F');
+      const gl = doc.splitTextToSize(g, contentW - 60);
+      doc.text(gl, margin + 52, gy);
+      gy += gl.length * 11;
+    });
+
+    y = gy + 10;
+  });
+
+  // ── Footer on all pages ──
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= pageCount; p++) {
+    doc.setPage(p);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...colors.muted);
+    doc.text(
+      `Generated by CLEAR Prompt Refiner · Page ${p} of ${pageCount}`,
+      pageW / 2,
+      pageH - 24,
+      { align: 'center' }
+    );
+  }
+
+  doc.save('CLEAR-Prompt-Refinement.pdf');
+}
+
+// ═══════════════════════════════════════════════
+//  EXAMPLE TOGGLE
+// ═══════════════════════════════════════════════
+function toggleExample() {
+  const toggle = document.getElementById('example-toggle');
+  const body = document.getElementById('example-body');
+  toggle.classList.toggle('open');
+  body.classList.toggle('open');
+}
+
+// ═══════════════════════════════════════════════
+//  UTILITY
+// ═══════════════════════════════════════════════
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Init
+document.addEventListener('DOMContentLoaded', () => {
+  showPage('page-intro');
+});
+</script>
+</body>
+</html>
