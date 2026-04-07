@@ -953,9 +953,9 @@ const STEPS = [
       'Does your prompt get to the point quickly?',
     ],
     example: {
-      before: 'Could you please help me write something about climate change that I could use for my class? I would really appreciate it if you could help me with this.',
-      after: 'Write an educational piece on climate change for my class.',
-      change: 'Removed the double request, filler phrases ("Could you please…", "I would really appreciate it"), and the vague trailing clause. The core ask is now one direct sentence.',
+      before: 'Hey, could you please help me out? I need to do some research on social media and how it affects mental health for my psychology class and I\'m not really sure where to start, so any help would be really great!',
+      after: 'Help me research how social media affects mental health for my psychology class.',
+      change: 'Removed the conversational opener, filler phrases ("I\'m not really sure where to start", "any help would be really great"), and the uncertainty hedging. The core ask is now one direct sentence.',
     },
   },
   {
@@ -980,9 +980,9 @@ const STEPS = [
       'Are all related instructions grouped and clearly connected?',
     ],
     example: {
-      before: 'Write an educational piece on climate change for my class.',
-      after: 'I teach 10th-grade science. Write an educational piece on climate change. Cover these topics in order: (1) what climate change is, (2) its main causes, (3) its global effects, (4) what students can do.',
-      change: 'Added who the audience is (context first), then stated the task, then provided a logical four-part structure. The AI now has a clear roadmap to follow.',
+      before: 'Help me research how social media affects mental health for my psychology class.',
+      after: 'I\'m a college student researching social media and mental health for a psychology class. Summarize what the research says, covering: (1) the overall relationship between social media use and mental health, (2) the key negative effects documented in studies, (3) factors that influence those effects.',
+      change: 'Added student context upfront (who is asking and why), then the task, then a logical three-part structure. The AI now has a roadmap — context before task, task before detail.',
     },
   },
   {
@@ -1009,9 +1009,9 @@ const STEPS = [
       'Would adding an example clarify what success looks like?',
     ],
     example: {
-      before: 'I teach 10th-grade science. Write an educational piece on climate change. Cover these topics in order: (1) what climate change is, (2) its main causes, (3) its global effects, (4) what students can do.',
-      after: 'I teach 10th-grade science (students ages 15–16). Write a 500-word explainer on climate change with four clearly labeled sections: (1) Definition, (2) Key Causes, (3) Global Effects, (4) Student Actions. Use accessible, engaging language. Include one real-world statistic per section.',
-      change: 'Added age range, word count target, section labels, language tone ("accessible, engaging"), and a formatting requirement (one statistic per section). Nothing is left to guesswork.',
+      before: 'I\'m a college student researching social media and mental health for a psychology class. Summarize what the research says, covering: (1) the overall relationship between social media use and mental health, (2) the key negative effects documented in studies, (3) factors that influence those effects.',
+      after: 'I\'m an undergraduate psychology student doing background research on social media and mental health. Provide a 600-word research summary with three labeled sections: (1) Overview of the Research Landscape, (2) Key Documented Effects (anxiety, depression, social comparison), (3) Factors That Shape Outcomes (age, type of use). Write at an introductory college reading level. Flag any findings that are debated or inconsistent across studies.',
+      change: 'Added student level, a word count, labeled section titles, a reading level, and a specific request to flag contested findings. Every output decision is now explicit — nothing is left to guesswork.',
     },
   },
   {
@@ -1037,9 +1037,9 @@ const STEPS = [
       'Are there assumptions in your prompt the AI might not share?',
     ],
     example: {
-      before: 'I teach 10th-grade science (students ages 15–16). Write a 500-word explainer on climate change with four clearly labeled sections: (1) Definition, (2) Key Causes, (3) Global Effects, (4) Student Actions. Use accessible, engaging language. Include one real-world statistic per section.',
-      after: 'You are an experienced science educator writing for a 10th-grade classroom (ages 15–16). Write a 500-word explainer on climate change with four labeled sections: (1) Definition, (2) Key Causes, (3) Global Effects, (4) Student Actions. Use accessible language — briefly define any scientific terms you use. Include one current statistic with its source per section. Do not include debates about climate policy.',
-      change: 'Added a role ("You are an experienced science educator") to steer the AI\'s voice. Added a guardrail ("do not include policy debates") to prevent a common drift. Clarified that scientific terms need brief definitions.',
+      before: 'I\'m an undergraduate psychology student doing background research on social media and mental health. Provide a 600-word research summary with three labeled sections: (1) Overview of the Research Landscape, (2) Key Documented Effects (anxiety, depression, social comparison), (3) Factors That Shape Outcomes (age, type of use). Write at an introductory college reading level. Flag any findings that are debated or inconsistent across studies.',
+      after: 'You are a research librarian helping an undergraduate student. I\'m gathering background research on how social media affects mental health for a psychology course. Provide a 600-word summary with three labeled sections: (1) Overview of the Research Landscape, (2) Key Documented Effects (anxiety, depression, social comparison), (3) Factors That Shape Outcomes (age, type of use). Write at an introductory college reading level. Flag debated or inconsistent findings. Do not fabricate citations — describe studies generally (e.g., "a study published in the early 2020s found…") so I can track down the real sources.',
+      change: 'Added a role ("research librarian") to orient the AI toward finding and explaining research rather than generating content. Added a guardrail against fabricated citations — a common AI pitfall — and a practical workaround so the student can still locate real sources.',
     },
   },
   {
@@ -1065,9 +1065,9 @@ const STEPS = [
       'How will you know if the AI\'s response is a good one?',
     ],
     example: {
-      before: 'You are an experienced science educator writing for a 10th-grade classroom (ages 15–16). Write a 500-word explainer on climate change with four labeled sections: (1) Definition, (2) Key Causes, (3) Global Effects, (4) Student Actions. Use accessible language — briefly define any scientific terms you use. Include one current statistic with its source per section. Do not include debates about climate policy.',
-      after: 'You are an experienced science educator writing for a U.S. 10th-grade classroom (ages 15–16) with basic biology knowledge but limited prior exposure to climate science. Write a 500-word explainer on climate change with four labeled sections: (1) Definition, (2) Key Causes, (3) Global Effects, (4) Two Concrete Actions Students Can Take. Use clear, engaging language and briefly define scientific terms. Include one current, cited statistic per section. Focus on scientific consensus — omit policy debates. The goal is to build understanding and a sense of agency, not anxiety.',
-      change: 'Added U.S. context and prior knowledge level (hidden assumptions). Sharpened "Student Actions" to "Two Concrete Actions" to prevent vague suggestions. Added the goal statement at the end — now the AI knows the emotional tone to strike.',
+      before: 'You are a research librarian helping an undergraduate student. I\'m gathering background research on how social media affects mental health for a psychology course. Provide a 600-word summary with three labeled sections: (1) Overview of the Research Landscape, (2) Key Documented Effects (anxiety, depression, social comparison), (3) Factors That Shape Outcomes (age, type of use). Write at an introductory college reading level. Flag debated or inconsistent findings. Do not fabricate citations — describe studies generally (e.g., "a study published in the early 2020s found…") so I can track down the real sources.',
+      after: 'You are a research librarian helping an undergraduate student. I\'m in an introductory psychology course and need background research on how social media affects mental health — specifically what peer-reviewed studies from the past decade say — before I form my own argument. Provide a 600-word summary with three labeled sections: (1) Overview of the Research Landscape — note how scientific understanding has evolved, (2) Key Documented Effects (anxiety, depression, social comparison) — distinguish correlational from causal findings where possible, (3) Factors That Shape Outcomes (age, passive vs. active use). Introductory college reading level. Flag debated or inconsistent findings. Do not fabricate citations — describe studies generally so I can verify them. Present the findings neutrally; I will draw my own conclusions.',
+      change: 'Added course level and clarified the purpose ("before I form my own argument") — hidden context that shifts the AI toward explaining rather than persuading. Scoped sources to peer-reviewed studies from the past decade. Added the correlation-vs.-causation distinction, a key concern in this research area. Emphasized neutral presentation so the AI does not editorialize.',
     },
   },
 ];
